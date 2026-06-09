@@ -309,7 +309,6 @@ export default function AdminPage() {
     try {
       const formData = new FormData();
       files.forEach((file) => formData.append("files", file));
-      formData.append("token", "__admin__");
       formData.append("collection_id", col.id);
       const res = await fetch("/api/upload", { method: "POST", body: formData });
       if (res.ok) fetchCollections();
@@ -338,7 +337,6 @@ export default function AdminPage() {
       const file = new File([blob], fname, { type: "application/javascript" });
       const formData = new FormData();
       formData.append("files", file);
-      formData.append("token", "__admin__");
       formData.append("collection_id", col.id);
       formData.append("source_url", url);
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
