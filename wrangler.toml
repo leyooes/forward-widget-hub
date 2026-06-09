@@ -17,3 +17,5 @@ bucket_name = "forward-widget-hub-storage"
 
 [vars]
 BACKEND = "cloudflare"
+ACCESS_PASSWORD = "8888"
+ADMIN_PASSWORD = "962464"
