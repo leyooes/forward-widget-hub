@@ -171,6 +171,14 @@ async function downloadAndStoreWidget(
   };
 }
 
+async function checkAdminAuth(request: NextRequest): Promise<boolean> {
+  const cookie = request.cookies.get("fwh_admin")?.value;
+  if (!cookie || !process.env.ADMIN_PASSWORD) return false;
+  const crypto = await import("crypto");
+  const hash = crypto.createHash("sha256").update(process.env.ADMIN_PASSWORD).digest("hex");
+  return cookie === hash;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -212,6 +220,9 @@ export async function POST(request: NextRequest) {
     let rawToken: string;
     let isNewUser = false;
 
+    // Check admin auth first
+    const isAdmin = await checkAdminAuth(request);
+
     if (token) {
       const hash = hashToken(token);
       const user = await db.prepare("SELECT id FROM users WHERE token_hash = ?").get(hash) as { id: string } | undefined;
@@ -220,6 +231,18 @@ export async function POST(request: NextRequest) {
       }
       userId = user.id;
       rawToken = token;
+    } else if (isAdmin) {
+      // Admin authenticated - allow upload to specified collection
+      const collectionId = formData.get("collection_id") as string | null;
+      if (!collectionId) {
+        return NextResponse.json({ error: "Collection ID required for admin upload" }, { status: 400 });
+      }
+      const col = await db.prepare("SELECT id, user_id FROM collections WHERE id = ?").get(collectionId) as { id: string; user_id: string } | undefined;
+      if (!col) {
+        return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+      }
+      userId = col.user_id;
+      rawToken = "";
     } else {
       userId = nanoid();
       rawToken = generateToken();
