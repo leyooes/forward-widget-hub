@@ -50,7 +50,7 @@ function InlineCopy({ text, title }: { text: string; title?: string }) {
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-      className={`p-1.5 rounded-lg transition-all flex-shrink-0 ${copied ? "bg-green-500 text-white" : "text-slate-300 hover:text-indigo-500 hover:bg-indigo-50"}`}
+      className={`p-1.5 rounded-lg transition-all flex-shrink-0 ${copied ? "bg-green-500 text-white" : "text-slate-300 hover:text-indigo-500 hover:bg0"}`}
       title={title ?? (copied ? "已复制" : "复制链接")}
     >
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -309,8 +309,7 @@ export default function AdminPage() {
     try {
       const formData = new FormData();
       files.forEach((file) => formData.append("files", file));
-      formData.append("collection_id", col.id);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const res = await fetch(`/api/admin/collections/${col.id}`, { method: "POST", body: formData });
       if (res.ok) fetchCollections();
       else {
         const data = await res.json();
@@ -337,9 +336,8 @@ export default function AdminPage() {
       const file = new File([blob], fname, { type: "application/javascript" });
       const formData = new FormData();
       formData.append("files", file);
-      formData.append("collection_id", col.id);
       formData.append("source_url", url);
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+      const uploadRes = await fetch(`/api/admin/collections/${col.id}`, { method: "POST", body: formData });
       if (uploadRes.ok) {
         setModuleUrlInput((prev) => ({ ...prev, [col.id]: "" }));
         fetchCollections();
