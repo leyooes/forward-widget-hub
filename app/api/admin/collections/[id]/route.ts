@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBackendDb, getBackendStore } from "@/lib/backend";
 import { verifyAdmin } from "@/lib/admin-auth";
 
+type Params = Promise<{ id: string }>;
+
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Params }
 ) {
   const denied = await verifyAdmin(request);
   if (denied) return denied;
@@ -13,8 +15,8 @@ export async function PUT(
   const db = await getBackendDb();
 
   const collection = (await db
-    .prepare("SELECT id, slug, icon_url FROM collections WHERE id = ?")
-    .get(id)) as { id: string; slug: string; icon_url: string } | undefined;
+    .prepare("SELECT id, slug FROM collections WHERE id = ?")
+    .get(id)) as { id: string; slug: string } | undefined;
 
   if (!collection) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -40,32 +42,6 @@ export async function PUT(
   await db.prepare(
     "UPDATE collections SET title = ?, description = ?, updated_at = unixepoch() WHERE id = ?"
   ).run(title.trim(), description || "", id);
-
-  return NextResponse.json({ success: true });
-}
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const denied = await verifyAdmin(request);
-  if (denied) return denied;
-
-  const { id } = await params;
-  const db = await getBackendDb();
-
-  const collection = (await db
-    .prepare("SELECT id FROM collections WHERE id = ?")
-    .get(id)) as { id: string } | undefined;
-
-  if (!collection) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  await db.prepare("DELETE FROM modules WHERE collection_id = ?").run(id);
-  await db.prepare("DELETE FROM collections WHERE id = ?").run(id);
-  const store = await getBackendStore();
-  await store.removeCollection(id);
 
   return NextResponse.json({ success: true });
 }
