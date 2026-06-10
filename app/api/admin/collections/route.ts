@@ -5,7 +5,8 @@ import { verifyAdmin } from "@/lib/admin-auth";
 interface CollectionRow {
   id: string;
   slug: string;
-  title: description: string;
+  title: string;
+  description: string;
   icon_url: string;
   user_id: string;
   source_url: string;
@@ -19,9 +20,9 @@ interface ModuleRow {
   filename: string;
   title: string;
   version: string;
-  author  file_size: number;
-  is_encrypted: number;
-  source_url: string;
+  author: string;
+  file_size: number;
+  is_encrypted: source_url: string;
 }
 
 export async function GET(request: NextRequest) {
