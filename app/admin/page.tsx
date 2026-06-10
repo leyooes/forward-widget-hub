@@ -28,8 +28,7 @@ interface Module {
   version: string;
   author: string;
   file_size: number;
-  is_encrypted: number;
-  source_url: string;
+  is_encrypted: source_url: string;
 }
 
 interface Collection {
