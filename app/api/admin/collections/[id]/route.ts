@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { getBackendDb, getBackendStore } from "@/lib/backend";
-import { verifyAdmin } from "@/lib/admin-auth parseWidgetMetadata, isEncrypted } from "@/lib/parser";
+import { verifyAdmin } from "@/lib/admin-auth";
+import { parseWidgetMetadata, isEncrypted } from "@/lib/parser";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
  
@@ -50,7 +51,7 @@ export async function POST(
 
     await db.prepare(
       `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       moduleId,
       collectionId,
