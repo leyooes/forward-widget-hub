@@ -27,5 +27,8 @@ export function createLocalStore(): Store {
       const dir = path.join(MODULES_DIR, collectionId);
       if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
     },
+    getUrl(collectionId, filename) {
+      return null;
+    },
   };
 }
