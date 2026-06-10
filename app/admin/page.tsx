@@ -10,10 +10,14 @@ import {
   FileCode,
   FileJson,
   Lock,
-  UploadCloud RefreshCw,
+  UploadCloud,
+  RefreshCw,
   Copy,
   Check,
-  Key Pencil ImagePlus Plus,
+  Key,
+  Pencil,
+  ImagePlus,
+  Plus,
   Globe,
 } from "lucide-react";
 
@@ -21,7 +25,8 @@ interface Module {
   id: string;
   filename: string;
   title: string;
-  version:  author: string;
+  version: string;
+  author: string;
   file_size: number;
   is_encrypted: number;
   source_url: string;
@@ -32,7 +37,8 @@ interface Collection {
   slug: string;
   title: string;
   description: string;
-  icon_url:  user_id: string;
+  icon_url: string;
+  user_id: string;
   source_url: string;
   created_at: number;
   updated_at: number;
@@ -44,7 +50,7 @@ function InlineCopy({ text, title }: { text: string; title?: string }) {
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-      className={`p-1.5 rounded-lg transition-all flex-shrink-0 ${copied ? "bg-green-500 text-white" : "text-slate-300 hover:text-indigo-500 hover:bg-ind50"}`}
+      className={`p-1.5 rounded-lg transition-all flex-shrink-0 ${copied ? "bg-green-500 text-white" : "text-slate-300 hover:text-indigo-500 hover:bg-indigo-50"}`}
       title={title ?? (copied ? "已复制" : "复制链接")}
     >
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -54,7 +60,7 @@ function InlineCopy({ text, title }: { text: string; title?: string }) {
 
 export default function AdminPage() {
   const [authState, setAuthState] = useState<
-    "loading" | "disabled"need-password" | "authenticated"
+    "loading" | "disabled" | "need-password" | "authenticated"
   >("loading");
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -65,7 +71,7 @@ export default function AdminPage() {
   const [deletingModuleId, setDeletingModuleId] = useState<string | null>(null);
   const [replacingModuleId, setReplacingModuleId] = useState<string | null>(null);
   const [syncingModuleId, setSyncingModuleId] = useState<string | null>(null);
-  const [syncingColId, setSyncId] = useState<string | null>(null);
+  const [syncingColId, setSyncingColId] = useState<string | null>(null);
 
   const [editingColId, setEditingColId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -189,7 +195,7 @@ export default function AdminPage() {
         if (!dlRes.ok) throw new Error(`Failed to download ${fname}`);
         const blob = await dlRes.blob();
         downloadedFiles.push(new File([blob], fname, { type: "application/javascript" }));
-        widgetMetas.push({ id: widget.id, title: widget.title, description: widget.description, version: widget.version, author.author, requiredVersion: widget.requiredVersion, source_url: widget.url });
+        widgetMetas.push({ id: widget.id, title: widget.title, description: widget.description, version: widget.version, author: widget.author, requiredVersion: widget.requiredVersion, source_url: widget.url });
       }
       const formData = new FormData();
       downloadedFiles.forEach((f) => formData.append("files", f));
@@ -238,11 +244,11 @@ export default function AdminPage() {
       return;
     setDeletingId(col.id);
     try {
-      const res = await fetch(`/api/collections/${col.slug}`, {
+      const res = await fetch(`/api/admin/collections/${col.id}`, {
         method: "DELETE",
       });
       if (res.ok) {
-        setCollections((prev) => prev.filter((c c.id !== col.id));
+        setCollections((prev) => prev.filter((c) => c.id !== col.id));
       }
     } finally {
       setDeletingId(null);
@@ -251,22 +257,23 @@ export default function AdminPage() {
 
   const startEdit = (col: Collection) => {
     setEditingColId(col.id);
-EditTitle(col.title);
+    setEditTitle(col.title);
     setEditDesc(col.description || "");
-   Icon(null);
+    setEditIcon(null);
     setEditIconPreview(null);
   };
 
   const cancelEdit = () => {
     setEditingColId(null);
-    setEditIcon(nullIconPreview(null);
+    setEditIcon(null);
+    setEditIconPreview(null);
   };
 
   const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setEditIcon(file);
-Preview(URL.createObjectURL(file));
+    setEditIconPreview(URL.createObjectURL(file));
   };
 
   const handleSaveEdit = async (col: Collection) => {
@@ -277,7 +284,7 @@ Preview(URL.createObjectURL(file));
       formData.append("title", editTitle.trim());
       formData.append("description", editDesc.trim());
       if (editIcon) formData.append("icon", editIcon);
-      const res = await fetch(`/api/collections/${col.slug}`, {
+      const res = await fetch(`/api/admin/collections/${col.id}`, {
         method: "PUT",
         body: formData,
       });
@@ -330,8 +337,8 @@ Preview(URL.createObjectURL(file));
       const file = new File([blob], fname, { type: "application/javascript" });
       const formData = new FormData();
       formData.append("files", file);
-      formDatacollection_id", col.id);
-.append("source_url", url);
+      formData.append("collection_id", col.id);
+      formData.append("source_url", url);
       const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
       if (uploadRes.ok) {
         setModuleUrlInput((prev) => ({ ...prev, [col.id]: "" }));
@@ -367,7 +374,8 @@ Preview(URL.createObjectURL(file));
             请设置 <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">ADMIN_PASSWORD</code> 环境变量以启用管理后台。
           </p>
         </div>
-      </    );
+      </div>
+    );
   }
 
   if (authState === "need-password") {
@@ -379,7 +387,7 @@ Preview(URL.createObjectURL(file));
               <Shield className="w-6 h-6 text-orange-600" />
             </div>
             <h1 className="text-xl font-bold text-slate-900">管理后台</h1>
-p className="text-sm text-slate-500">请输入管理员密码</p>
+            <p className="text-sm text-slate-500">请输入管理员密码</p>
           </div>
           <div className="space-y-3">
             <input
@@ -390,7 +398,7 @@ p className="text-sm text-slate-500">请输入管理员密码</p>
                 if (e.key === "Enter") handlePasswordSubmit();
               }}
               placeholder="请输入管理员密码"
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-nonering-2 focus:ring-orange-500 focus:border-transparent"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               autoFocus
             />
             {passwordError && (
@@ -412,7 +420,9 @@ p className="text-sm text-slate-500">请输入管理员密码</p>
               登录
             </button>
           </div>
-        </      </    );
+        </div>
+      </div>
+    );
   }
 
   const totalModules = collections.reduce(
@@ -471,7 +481,7 @@ p className="text-sm text-slate-500">请输入管理员密码</p>
                       title="更换图标"
                     >
                       {editIconPreview ? (
-                        <img src={Preview} alt="" className="w-full h-full object-cover" />
+                        <img src={editIconPreview} alt="" className="w-full h-full object-cover" />
                       ) : col.icon_url ? (
                         <img src={col.icon_url} alt="" className="w-full h-full object-cover opacity-60" />
                       ) : (
@@ -483,14 +493,14 @@ p className="text-sm text-slate-500">请输入管理员密码</p>
                         type="text"
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full text-sm font-semibold text-slate-800 border border-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full text-sm font-semibold text-slate-800 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         placeholder="合集标题"
                       />
                       <input
                         type="text"
                         value={editDesc}
                         onChange={(e) => setEditDesc(e.target.value)}
-                        className="w-full text-xs text-slate-500 border border-200 rounded-lg px-3 py-1.5 focus:outline-nonering-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         placeholder="合集描述（可选）"
                       />
                     </div>
@@ -503,10 +513,11 @@ p className="text-sm text-slate-500">请输入管理员密码</p>
                     <button
                       onClick={() => handleSaveEdit(col)}
                       disabled={savingEdit || !editTitle.trim()}
-                      className="px-3 py-1.5 text-xs text-white bg-indigo-600 hover:bg-700 rounded-lg transition-colors disabled:opacity-50"
+                      className="px-3 py-1.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors disabled:opacity-50"
                     >{savingEdit ? "保存中..." : "保存"}</button>
                   </div>
-                </              ) : (
+                </div>
+              ) : (
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     {col.icon_url ? (
@@ -611,7 +622,7 @@ p className="text-sm text-slate-500">请输入管理员密码</p>
                       {mod.file_size < 1024
                         ? `${mod.file_size} B`
                         : `${(mod.file_size / 1024).toFixed(1)} KB`}
-                      {mod.author ? ` · ${}` : ""}
+                      {mod.author ? ` · ${mod.author}` : ""}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
@@ -644,7 +655,7 @@ p className="text-sm text-slate-500">请输入管理员密码</p>
                       {deletingModuleId === mod.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                     </button>
                   </div>
-               >
+                </div>
               ))}
               {col.modules.length === 0 && (
                 <div className="px-6 py-4 text-center text-sm text-slate-400">
@@ -683,8 +694,10 @@ p className="text-sm text-slate-500">请输入管理员密码</p>
                   </button>
                 )}
               </div>
-            </          </div>
+            </div>
+          </div>
         ))}
       </div>
-    </  );
+    </div>
+  );
 }
