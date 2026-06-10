@@ -3,10 +3,10 @@ import { nanoid } from "nanoid";
 import { getBackendDb, getBackendStore } from "@/lib/backend";
 import { generateToken, hashToken, getTokenPrefix } from "@/lib/auth";
 import { parseWidgetMetadata, isEncrypted } from "@/lib/parser";
-
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const DOWNLOAD_TIMEOUT = 30_000; // 30s per remote file
-
+ 
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const DOWNLOAD_TIMEOUT = 30_000;
+ 
 interface FwdWidget {
   id?: string;
   title?: string;
@@ -16,16 +16,16 @@ interface FwdWidget {
   requiredVersion?: string;
   url: string;
 }
-
+ 
 interface FwdIndex {
   title?: string;
   description?: string;
   icon?: string;
   widgets: FwdWidget[];
 }
-
+ 
 type ModuleInfo = { id: string; filename: string; title: string; version?: string; encrypted: boolean; source_url?: string };
-
+ 
 async function downloadRemoteJs(url: string): Promise<{ buffer: Buffer; filename: string }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT);
@@ -42,7 +42,7 @@ async function downloadRemoteJs(url: string): Promise<{ buffer: Buffer; filename
     clearTimeout(timeout);
   }
 }
-
+ 
 function parseFwdFile(content: string): FwdIndex {
   const parsed = JSON.parse(content);
   if (!parsed.widgets || !Array.isArray(parsed.widgets)) {
@@ -55,7 +55,7 @@ function parseFwdFile(content: string): FwdIndex {
   }
   return parsed as FwdIndex;
 }
-
+ 
 async function downloadRemoteFile(url: string): Promise<{ buffer: Buffer; filename: string; isFwd: boolean }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT);
@@ -75,7 +75,7 @@ async function downloadRemoteFile(url: string): Promise<{ buffer: Buffer; filena
     clearTimeout(timeout);
   }
 }
-
+ 
 function createProgressStream(
   fn: (send: (event: Record<string, unknown>) => void) => Promise<void>,
 ): Response {
@@ -98,7 +98,7 @@ function createProgressStream(
     headers: { "Content-Type": "text/x-ndjson", "Cache-Control": "no-cache" },
   });
 }
-
+ 
 async function downloadAndStoreIcon(
   iconUrl: string,
   collectionId: string,
@@ -129,10 +129,10 @@ async function downloadAndStoreIcon(
       clearTimeout(timeout);
     }
   } catch {
-    return iconUrl; // fallback to original URL
+    return iconUrl;
   }
 }
-
+ 
 async function downloadAndStoreWidget(
   widget: FwdWidget,
   collectionId: string,
@@ -170,7 +170,7 @@ async function downloadAndStoreWidget(
     source_url: srcUrl,
   };
 }
-
+ 
 async function checkAdminAuth(request: NextRequest): Promise<boolean> {
   const cookie = request.cookies.get("fwh_admin")?.value;
   if (!cookie || !process.env.ADMIN_PASSWORD) return false;
@@ -178,7 +178,7 @@ async function checkAdminAuth(request: NextRequest): Promise<boolean> {
   const hash = crypto.createHash("sha256").update(process.env.ADMIN_PASSWORD).digest("hex");
   return cookie === hash;
 }
-
+ 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -200,11 +200,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid widget_meta format" }, { status: 400 });
       }
     }
-
+ 
     if (!files.length && !remoteUrl) {
       return NextResponse.json({ error: "No files or URL provided" }, { status: 400 });
     }
-
+ 
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
         return NextResponse.json({ error: `File ${file.name} exceeds 5MB limit` }, { status: 413 });
@@ -213,16 +213,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `File ${file.name} must be .js or .fwd` }, { status: 400 });
       }
     }
-
+ 
     const db = await getBackendDb();
     const store = await getBackendStore();
     let userId: string;
     let rawToken: string;
     let isNewUser = false;
-
-    // Check admin auth first
+ 
     const isAdmin = await checkAdminAuth(request);
-
+ 
     if (token) {
       const hash = hashToken(token);
       const user = await db.prepare("SELECT id FROM users WHERE token_hash = ?").get(hash) as { id: string } | undefined;
@@ -232,16 +231,21 @@ export async function POST(request: NextRequest) {
       userId = user.id;
       rawToken = token;
     } else if (isAdmin) {
-      // Admin authenticated - allow upload to specified collection
       const collectionId = formData.get("collection_id") as string | null;
-      if (!collectionId) {
-        return NextResponse.json({ error: "Collection ID required for admin upload" }, { status: 400 });
+      if (collectionId) {
+        const col = await db.prepare("SELECT id, user_id FROM collections WHERE id = ?").get(collectionId) as { id: string; user_id: string } | undefined;
+        if (!col) {
+          return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+        }
+        userId = col.user_id;
+      } else {
+        userId = nanoid();
+        rawToken = generateToken();
+        const hash = hashToken(rawToken);
+        const prefix = getTokenPrefix(rawToken);
+        await db.prepare("INSERT INTO users (id, token_hash, token_prefix) VALUES (?, ?, ?)").run(userId, hash, prefix);
+        isNewUser = true;
       }
-      const col = await db.prepare("SELECT id, user_id FROM collections WHERE id = ?").get(collectionId) as { id: string; user_id: string } | undefined;
-      if (!col) {
-        return NextResponse.json({ error: "Collection not found" }, { status: 404 });
-      }
-      userId = col.user_id;
       rawToken = "";
     } else {
       userId = nanoid();
@@ -251,13 +255,12 @@ export async function POST(request: NextRequest) {
       await db.prepare("INSERT INTO users (id, token_hash, token_prefix) VALUES (?, ?, ?)").run(userId, hash, prefix);
       isNewUser = true;
     }
-
+ 
     const proto = request.headers.get("x-forwarded-proto") || "https";
     const host = request.headers.get("host") || request.nextUrl.host;
     const siteUrl = `${proto}://${host}`;
     const resultBase = { ...(isNewUser ? { token: rawToken } : {}), manageUrl: `${siteUrl}/manage/${rawToken}` };
-
-    // Handle remote URL
+ 
     if (remoteUrl) {
       let downloaded: Awaited<ReturnType<typeof downloadRemoteFile>>;
       try {
@@ -265,7 +268,7 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         return NextResponse.json({ error: `Failed to download: ${(e as Error).message}` }, { status: 400 });
       }
-
+ 
       if (downloaded.isFwd) {
         let fwd: FwdIndex;
         try {
@@ -273,7 +276,7 @@ export async function POST(request: NextRequest) {
         } catch (e) {
           return NextResponse.json({ error: `Invalid .fwd content: ${(e as Error).message}` }, { status: 400 });
         }
-
+ 
         const collectionId = nanoid();
         const slug = nanoid(10);
         const iconUrl = fwd.icon ? await downloadAndStoreIcon(fwd.icon, collectionId, slug, siteUrl, store) : "";
@@ -281,7 +284,7 @@ export async function POST(request: NextRequest) {
           "INSERT INTO collections (id, user_id, slug, title, description, icon_url, source_url) VALUES (?, ?, ?, ?, ?, ?, ?)"
         ).run(collectionId, userId, slug, fwd.title || downloaded.filename, fwd.description || "", iconUrl, remoteUrl);
         const fwdUrl = `${siteUrl}/api/collections/${slug}/fwd`;
-
+ 
         return createProgressStream(async (send) => {
           const allModules: ModuleInfo[] = [];
           for (let i = 0; i < fwd.widgets.length; i++) {
@@ -294,8 +297,7 @@ export async function POST(request: NextRequest) {
           send({ type: "result", ...resultBase, fwdUrl, modules: allModules });
         });
       }
-
-      // Non-.fwd remote: single .js file
+ 
       const { buffer, filename } = downloaded;
       const encrypted = isEncrypted(buffer);
       const meta = encrypted ? null : parseWidgetMetadata(buffer.toString("utf8"));
@@ -310,20 +312,17 @@ export async function POST(request: NextRequest) {
       ).run(moduleId, collectionId, filename, meta?.id || null, meta?.title || filename.replace(".js", ""), meta?.description || "", meta?.version || null, meta?.author || null, meta?.requiredVersion || null, buffer.length, encrypted ? 1 : 0, remoteUrl);
       const ossKey = await store.save(collectionId, filename, buffer);
       if (ossKey) await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey, moduleId);
-
+ 
       return NextResponse.json({
         ...resultBase, fwdUrl,
         modules: [{ id: moduleId, filename, title: meta?.title || filename, version: meta?.version, encrypted }],
       });
     }
-
-    // Separate .fwd and .js files
+ 
     const fwdFiles = files.filter((f) => f.name.endsWith(".fwd"));
     const jsFiles = files.filter((f) => f.name.endsWith(".js"));
-
-    // If has .fwd files, use streaming response
+ 
     if (fwdFiles.length > 0) {
-      // Pre-parse all .fwd files for validation and total count
       const parsedFwds: { file: File; fwd: FwdIndex }[] = [];
       let totalWidgets = 0;
       for (const file of fwdFiles) {
@@ -337,12 +336,12 @@ export async function POST(request: NextRequest) {
         parsedFwds.push({ file, fwd });
         totalWidgets += fwd.widgets.length;
       }
-
+ 
       return createProgressStream(async (send) => {
         const allModules: ModuleInfo[] = [];
         let fwdUrl: string | undefined;
         let currentWidget = 0;
-
+ 
         for (const { file, fwd } of parsedFwds) {
           const collectionId = nanoid();
           const slug = nanoid(10);
@@ -351,7 +350,7 @@ export async function POST(request: NextRequest) {
             "INSERT INTO collections (id, user_id, slug, title, description, icon_url, source_url) VALUES (?, ?, ?, ?, ?, ?, ?)"
           ).run(collectionId, userId, slug, fwd.title || file.name, fwd.description || "", iconUrl, sourceUrl || null);
           fwdUrl = `${siteUrl}/api/collections/${slug}/fwd`;
-
+ 
           for (const widget of fwd.widgets) {
             currentWidget++;
             const fname = widget.url.split("/").pop() || "widget.js";
@@ -360,8 +359,7 @@ export async function POST(request: NextRequest) {
             allModules.push(mod);
           }
         }
-
-        // Also process .js files if any
+ 
         if (jsFiles.length > 0) {
           const existingCollection = formData.get("collection_id") as string | null;
           let collectionId: string;
@@ -390,28 +388,25 @@ export async function POST(request: NextRequest) {
             allModules.push({ id: moduleId, filename: file.name, title: meta?.title || file.name, version: meta?.version, encrypted });
           }
         }
-
+ 
         send({ type: "result", ...resultBase, ...(fwdUrl ? { fwdUrl } : {}), modules: allModules });
       });
     }
-
-    // Sync mode — update existing collection modules
+ 
     if (syncMode && syncCollectionId) {
       const col = await db.prepare("SELECT id, slug FROM collections WHERE id = ? AND user_id = ?").get(syncCollectionId, userId) as { id: string; slug: string } | undefined;
       if (!col) {
         return NextResponse.json({ error: "Collection not found or not owned" }, { status: 404 });
       }
       const collectionId = col.id;
-
-      // Update collection metadata if provided
+ 
       if (collectionTitle) {
         const storedIcon = collectionIcon ? await downloadAndStoreIcon(collectionIcon, collectionId, col.slug, siteUrl, store) : collectionIcon;
         await db.prepare("UPDATE collections SET title = ?, description = ?, icon_url = ?, source_url = COALESCE(?, source_url), updated_at = unixepoch() WHERE id = ?").run(collectionTitle, collectionDesc, storedIcon, sourceUrl, collectionId);
       }
-
-      // Get existing modules for matching
+ 
       const existingModules = await db.prepare("SELECT id, filename, widget_id, source_url, oss_key FROM modules WHERE collection_id = ?").all(collectionId) as Array<{ id: string; filename: string; widget_id: string | null; source_url: string | null; oss_key: string | null }>;
-
+ 
       const allModules: ModuleInfo[] = [];
       for (let i = 0; i < jsFiles.length; i++) {
         const file = jsFiles[i];
@@ -423,17 +418,15 @@ export async function POST(request: NextRequest) {
         const wmSourceUrl = wm?.source_url || null;
         const wmWidgetId = wm?.id || meta?.id || null;
         const filename = file.name;
-
-        // Match priority: source_url → widget_id → filename
+ 
         const matched = existingModules.find((m) =>
           (wmSourceUrl && m.source_url === wmSourceUrl) ||
           (wmWidgetId && m.widget_id === wmWidgetId) ||
           m.filename === filename
         );
-
+ 
         if (matched) {
           const ossKey = await store.save(collectionId, filename, buffer);
-          // UPDATE existing module
           await db.prepare(
             `UPDATE modules SET filename = ?, widget_id = ?, title = ?, description = ?, version = ?, author = ?, required_version = ?, file_size = ?, is_encrypted = ?, source_url = COALESCE(?, source_url), oss_key = ?, updated_at = unixepoch() WHERE id = ?`
           ).run(filename,
@@ -449,7 +442,6 @@ export async function POST(request: NextRequest) {
             matched.id);
           allModules.push({ id: matched.id, filename, title: wm?.title || meta?.title || filename, version: wm?.version || meta?.version, encrypted, source_url: wmSourceUrl || matched.source_url || undefined });
         } else {
-          // INSERT new module
           const moduleId = nanoid();
           await db.prepare(
             `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
@@ -468,16 +460,15 @@ export async function POST(request: NextRequest) {
           allModules.push({ id: moduleId, filename, title: wm?.title || meta?.title || filename, version: wm?.version || meta?.version, encrypted, source_url: wmSourceUrl || undefined });
         }
       }
-
+ 
       const fwdUrl = `${siteUrl}/api/collections/${col.slug}/fwd`;
       return NextResponse.json({ ...resultBase, fwdUrl, modules: allModules, synced: true });
     }
-
-    // Only .js files — regular JSON response
+ 
     const allModules: ModuleInfo[] = [];
     let collectionId: string;
     let collectionSlug: string;
-
+ 
     const existingCollection = formData.get("collection_id") as string | null;
     if (existingCollection) {
       const col = await db.prepare("SELECT id, slug FROM collections WHERE id = ? AND user_id = ?").get(existingCollection, userId) as { id: string; slug: string } | undefined;
@@ -491,7 +482,7 @@ export async function POST(request: NextRequest) {
       collectionSlug = nanoid(10);
       await db.prepare("INSERT INTO collections (id, user_id, slug, title, description, icon_url) VALUES (?, ?, ?, ?, ?, ?)").run(collectionId, userId, collectionSlug, collectionTitle, collectionDesc, collectionIcon);
     }
-
+ 
     for (let i = 0; i < jsFiles.length; i++) {
       const file = jsFiles[i];
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -501,7 +492,7 @@ export async function POST(request: NextRequest) {
       const wm = widgetMeta?.[i];
       const moduleId = nanoid();
       const filename = file.name;
-
+ 
       await db.prepare(
         `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -514,12 +505,12 @@ export async function POST(request: NextRequest) {
         wm?.requiredVersion || meta?.requiredVersion || null,
         file.size, encrypted ? 1 : 0,
         wm?.source_url || sourceUrl || null);
-
+ 
       const ossKey = await store.save(collectionId, filename, buffer);
       if (ossKey) await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey, moduleId);
       allModules.push({ id: moduleId, filename, title: wm?.title || meta?.title || filename, version: wm?.version || meta?.version, encrypted });
     }
-
+ 
     const fwdUrl = `${siteUrl}/api/collections/${collectionSlug}/fwd`;
     return NextResponse.json({ ...resultBase, fwdUrl, modules: allModules });
   } catch (error) {
