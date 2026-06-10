@@ -5,9 +5,6 @@ const isCloudflare =
 
 const nextConfig: NextConfig = {
   ...(isCloudflare ? {} : { output: "standalone" as const }),
-  experimental: {
-    allowedHosts: ['.monkeycode-ai.online']
-  },
   serverExternalPackages: isCloudflare ? [] : ["better-sqlite3", "ali-oss"],
   turbopack: isCloudflare
     ? {
