@@ -49,13 +49,16 @@ export async function PUT(
 
   // Check admin auth first, then fall back to token auth
   const isAdmin = await verifyAdminAuth(request);
-  let auth: { userId: string } | null = null;
+  let userId: string | null = null;
 
-  if (!isAdmin) {
+  if (isAdmin) {
+    userId = "admin";
+  } else {
     const token = extractToken(request);
     if (!token) return NextResponse.json({ error: "Token required" }, { status: 401 });
-    auth = await authenticateToken(token);
+    const auth = await authenticateToken(token);
     if (!auth) return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    userId = auth.userId;
   }
 
   const { slug } = await params;
@@ -66,7 +69,7 @@ export async function PUT(
   }
 
   // Admin can edit any collection, users can only edit their own
-  if (!isAdmin && collection.user_id !== auth.userId) {
+  if (userId !== "admin" && collection.user_id !== userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
