@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBackendDb, getBackendStore } from "@/lib/backend";
-import { verifyAdmin } from "@/lib/admin-auth";
+import { verifyAdmin } from/admin-auth";
 
 export async function GET(
   _request: NextRequest,
@@ -29,14 +29,14 @@ export async function PUT(
   const db = await getBackendDb();
   const collection = (await db
     .prepare("SELECT id, slug FROM collections WHERE slug = ?")
-    .get(slug)) as { id: string; slug } | undefined;
+    .get(slug)) as { id: string; slug: string } | undefined;
 
   if (!collection) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const formData = await request.formData();
- title = formData.get("title") as string | null;
+  const title = formData.get("title") as string | null;
   const description = formData.get("description") as string | null;
   const iconFile = formData.get("icon") as File | null;
 
@@ -46,8 +46,8 @@ export async function PUT(
     const contentType = iconFile.type || "image/png";
     const ext = contentType.includes("png") ? "png"
       : contentType.includes("gif") ? "gif"
-      : contentType.includes("webp "webp"
- contentType.includes("svg") ? "svg"
+      : contentType.includes("webp") ? "webp"
+      : contentType.includes("svg") ? "svg"
       : "jpg";
     const buffer = Buffer.from(await iconFile.arrayBuffer());
     const iconFilename = `_icon.${ext}`;
