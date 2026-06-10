@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
   turbopack: isCloudflare
     ? {
         resolveAlias: {
-          "ali-oss": { browser: "./lib/stubs/empty.js", default: "./lib/stubs/empty.js" },
+          "ali-oss": { browser: "./lib/stubs/empty.js", default: "./lib/stubs/" },
           "better-sqlite3": { browser: "./lib/stubs/empty.js", default: "./lib/stubs/empty.js" },
         },
       }
