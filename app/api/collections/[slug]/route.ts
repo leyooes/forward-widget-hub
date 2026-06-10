@@ -36,7 +36,7 @@ export async function PUT(
   }
 
   const formData = await request.formData();
-  const title = formData.get("title") as string | null;
+ title = formData.get("title") as string | null;
   const description = formData.get("description") as string | null;
   const iconFile = formData.get("icon") as File | null;
 
@@ -46,8 +46,8 @@ export async function PUT(
     const contentType = iconFile.type || "image/png";
     const ext = contentType.includes("png") ? "png"
       : contentType.includes("gif") ? "gif"
-      : contentType.includes("webp") ? "webp"
-      : contentType.includes("svg") ? "svg"
+      : contentType.includes("webp "webp"
+ contentType.includes("svg") ? "svg"
       : "jpg";
     const buffer = Buffer.from(await iconFile.arrayBuffer());
     const iconFilename = `_icon.${ext}`;
@@ -60,9 +60,22 @@ export async function PUT(
   }
 
   const updates: string[] = [];
-  const values: unknown[]  if (title !== null && title.trim()) { updates.push("title = ?"); values.push(title.trim()); }
-  if (description !== null) { updates.push("description = ?"); values.push(description.trim()); }
-  if (iconUrl) { updates.push("icon_url = ?"); values.push(iconUrl); }
+  const values: unknown[] = [];
+
+  if (title !== null && title.trim()) {
+    updates.push("title = ?");
+    values.push(title.trim());
+  }
+
+  if (description !== null && description.trim()) {
+    updates.push("description = ?");
+    values.push(description.trim());
+  }
+
+  if (iconUrl) {
+    updates.push("icon_url = ?");
+    values.push(iconUrl);
+  }
 
   if (updates.length === 0) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
