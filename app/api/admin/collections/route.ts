@@ -22,7 +22,8 @@ interface ModuleRow {
   version: string;
   author: string;
   file_size: number;
-  is_encrypted: source_url: string;
+  is_encrypted: number;
+  source_url: string;
 }
 
 export async function GET(request: NextRequest) {
