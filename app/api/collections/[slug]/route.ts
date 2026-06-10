@@ -2,18 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { getBackendDb, getBackendStore } from "@/lib/backend";
 import { verifyAdmin } from "@/lib/admin-auth";
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const { slug } = await params;
+  const db = await getBackendDb();
+  const collection = await db.prepare("SELECT * FROM collections WHERE slug = ?").get(slug) as Record<string, unknown> | undefined;
+  if (!collection) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const modules = await db.prepare(
+    "SELECT id, filename, widget_id, title, description, version, author, file_size, is_encrypted FROM modules WHERE collection_id = ? ORDER BY created_at"
+  ).all(collection.id);
+
+  return NextResponse.json({ collection, modules });
+}
+
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   const denied = await verifyAdmin(request);
   if (denied) return denied;
 
-  const { id } = await params;
+  const { slug } = await params;
   const db = await getBackendDb();
   const collection = (await db
-    .prepare("SELECT id, slug FROM collections WHERE id = ?")
-    .get(id)) as { id: string; slug: string } | undefined;
+    .prepare("SELECT id, slug FROM collections WHERE slug = ?")
+    .get(slug)) as { id: string; slug } | undefined;
 
   if (!collection) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -44,8 +60,7 @@ export async function PUT(
   }
 
   const updates: string[] = [];
-  const values: unknown[] = [];
-  if (title !== null && title.trim()) { updates.push("title = ?"); values.push(title.trim()); }
+  const values: unknown[]  if (title !== null && title.trim()) { updates.push("title = ?"); values.push(title.trim()); }
   if (description !== null) { updates.push("description = ?"); values.push(description.trim()); }
   if (iconUrl) { updates.push("icon_url = ?"); values.push(iconUrl); }
 
@@ -64,26 +79,26 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   const denied = await verifyAdmin(request);
   if (denied) return denied;
 
-  const { id } = await params;
+  const { slug } = await params;
   const db = await getBackendDb();
 
   const collection = (await db
-    .prepare("SELECT id FROM collections WHERE id = ?")
-    .get(id)) as { id: string } | undefined;
+    .prepare("SELECT id FROM collections WHERE slug = ?")
+    .get(slug)) as { id: string } | undefined;
 
   if (!collection) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  await db.prepare("DELETE FROM modules WHERE collection_id = ?").run(id);
-  await db.prepare("DELETE FROM collections WHERE id = ?").run(id);
+  await db.prepare("DELETE FROM modules WHERE collection_id = ?").run(collection.id);
+  await db.prepare("DELETE FROM collections WHERE id = ?").run(collection.id);
   const store = await getBackendStore();
-  await store.removeCollection(id);
+  await store.removeCollection(collection.id);
 
   return NextResponse.json({ success: true });
 }
