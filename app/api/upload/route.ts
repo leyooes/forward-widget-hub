@@ -129,7 +129,7 @@ async function downloadAndStoreIcon(
       clearTimeout(timeout);
     }
   } catch {
-    return iconUrl;
+    return iconUrl; // fallback to original URL
   }
 }
 
@@ -211,22 +211,15 @@ export async function POST(request: NextRequest) {
     let userId: string;
     let rawToken: string;
     let isNewUser = false;
-    let isAdmin = false;
 
     if (token) {
-      if (token === "__admin__") {
-        isAdmin = true;
-        userId = "__admin__";
-        rawToken = token;
-      } else {
-        const hash = hashToken(token);
-        const user = await db.prepare("SELECT id FROM users WHERE token_hash = ?").get(hash) as { id: string } | undefined;
-        if (!user) {
-          return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-        }
-        userId = user.id;
-        rawToken = token;
+      const hash = hashToken(token);
+      const user = await db.prepare("SELECT id FROM users WHERE token_hash = ?").get(hash) as { id: string } | undefined;
+      if (!user) {
+        return NextResponse.json({ error: "Invalid token" }, { status: 401 });
       }
+      userId = user.id;
+      rawToken = token;
     } else {
       userId = nanoid();
       rawToken = generateToken();
@@ -350,9 +343,7 @@ export async function POST(request: NextRequest) {
           const existingCollection = formData.get("collection_id") as string | null;
           let collectionId: string;
           if (existingCollection) {
-            const col = isAdmin
-              ? await db.prepare("SELECT id, slug FROM collections WHERE id = ?").get(existingCollection) as { id: string; slug: string } | undefined
-              : await db.prepare("SELECT id, slug FROM collections WHERE id = ? AND user_id = ?").get(existingCollection, userId) as { id: string; slug: string } | undefined;
+            const col = await db.prepare("SELECT id, slug FROM collections WHERE id = ? AND user_id = ?").get(existingCollection, userId) as { id: string; slug: string } | undefined;
             if (!col) throw new Error("Collection not found or not owned");
             collectionId = col.id;
           } else {
@@ -370,16 +361,7 @@ export async function POST(request: NextRequest) {
             await db.prepare(
               `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-            ).run(moduleId, collectionId, file.name,
-              wm?.id || meta?.id || null,
-              wm?.title || meta?.title || file.name.replace(".js", ""),
-              wm?.description || meta?.description || "",
-              wm?.version || meta?.version || null,
-              wm?.author || meta?.author || null,
-              wm?.requiredVersion || meta?.requiredVersion || null,
-              file.size,
-              encrypted ? 1 : 0,
-              wm?.source_url || null);
+            ).run(moduleId, collectionId, file.name, meta?.id || null, meta?.title || file.name.replace(".js", ""), meta?.description || "", meta?.version || null, meta?.author || null, meta?.requiredVersion || null, file.size, encrypted ? 1 : 0, wm?.source_url || null);
             const ossKey2 = await store.save(collectionId, file.name, buffer);
             if (ossKey2) await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey2, moduleId);
             allModules.push({ id: moduleId, filename: file.name, title: meta?.title || file.name, version: meta?.version, encrypted });
@@ -392,9 +374,7 @@ export async function POST(request: NextRequest) {
 
     // Sync mode — update existing collection modules
     if (syncMode && syncCollectionId) {
-      const col = isAdmin
-        ? await db.prepare("SELECT id, slug FROM collections WHERE id = ?").get(syncCollectionId) as { id: string; slug: string } | undefined
-        : await db.prepare("SELECT id, slug FROM collections WHERE id = ? AND user_id = ?").get(syncCollectionId, userId) as { id: string; slug: string } | undefined;
+      const col = await db.prepare("SELECT id, slug FROM collections WHERE id = ? AND user_id = ?").get(syncCollectionId, userId) as { id: string; slug: string } | undefined;
       if (!col) {
         return NextResponse.json({ error: "Collection not found or not owned" }, { status: 404 });
       }
@@ -477,9 +457,7 @@ export async function POST(request: NextRequest) {
 
     const existingCollection = formData.get("collection_id") as string | null;
     if (existingCollection) {
-      const col = isAdmin
-        ? await db.prepare("SELECT id, slug FROM collections WHERE id = ?").get(existingCollection) as { id: string; slug: string } | undefined
-        : await db.prepare("SELECT id, slug FROM collections WHERE id = ? AND user_id = ?").get(existingCollection, userId) as { id: string; slug: string } | undefined;
+      const col = await db.prepare("SELECT id, slug FROM collections WHERE id = ? AND user_id = ?").get(existingCollection, userId) as { id: string; slug: string } | undefined;
       if (!col) {
         return NextResponse.json({ error: "Collection not found or not owned" }, { status: 404 });
       }
@@ -503,7 +481,7 @@ export async function POST(request: NextRequest) {
 
       await db.prepare(
         `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(moduleId, collectionId, filename,
         wm?.id || meta?.id || null,
         wm?.title || meta?.title || filename.replace(".js", ""),
