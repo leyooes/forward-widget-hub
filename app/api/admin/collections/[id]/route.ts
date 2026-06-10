@@ -51,7 +51,7 @@ export async function POST(
 
     await db.prepare(
       `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       moduleId,
       collectionId,
@@ -113,17 +113,22 @@ export async function PUT(
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
  
+  let iconUrl = collection.icon_url || "";
+ 
   if (icon) {
     const store = await getBackendStore();
     const iconBuffer = Buffer.from(await icon.arrayBuffer());
     const ext = icon.name.split(".").pop() || "png";
     const iconKey = `_icon.${ext}`;
     await store.save(id, iconKey, iconBuffer);
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+    const host = request.headers.get("host") || request.nextUrl.host;
+    iconUrl = `${proto}://${host}/api/collections/${collection.slug}/icon`;
   }
  
   await db.prepare(
-    "UPDATE collections SET title = ?, description = ?, updated_at = unixepoch() WHERE id = ?"
-  ).run(title.trim(), description || "", id);
+    "UPDATE collections SET title = ?, description = ?, icon_url = ?, updated_at = unixepoch() WHERE id = ?"
+  ).run(title.trim(), description || "", iconUrl, id);
  
   return NextResponse.json({ success: true });
 }
