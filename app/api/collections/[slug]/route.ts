@@ -6,6 +6,21 @@ function getClientIp(request: NextRequest): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
 }
 
+async function sha256(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function verifyAdminAuth(request: NextRequest): Promise<boolean> {
+  const cookie = request.cookies.get("fwh_admin")?.value;
+  if (!cookie || !process.env.ADMIN_PASSWORD) return false;
+  const hash = await sha256(process.env.ADMIN_PASSWORD);
+  return cookie === hash;
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -32,15 +47,26 @@ export async function PUT(
     return NextResponse.json({ error: "Too many requests" }, { status: 429, headers: { "Retry-After": String(rateCheck.retryAfter) } });
   }
 
-  const token = extractToken(request);
-  if (!token) return NextResponse.json({ error: "Token required" }, { status: 401 });
-  const auth = await authenticateToken(token);
-  if (!auth) return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+  // Check admin auth first, then fall back to token auth
+  const isAdmin = await verifyAdminAuth(request);
+  let auth: { userId: string } | null = null;
+
+  if (!isAdmin) {
+    const token = extractToken(request);
+    if (!token) return NextResponse.json({ error: "Token required" }, { status: 401 });
+    auth = await authenticateToken(token);
+    if (!auth) return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+  }
 
   const { slug } = await params;
   const db = await getBackendDb();
   const collection = await db.prepare("SELECT id, user_id FROM collections WHERE slug = ?").get(slug) as { id: string; user_id: string } | undefined;
-  if (!collection || collection.user_id !== auth.userId) {
+  if (!collection) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Admin can edit any collection, users can only edit their own
+  if (!isAdmin && collection.user_id !== auth.userId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
