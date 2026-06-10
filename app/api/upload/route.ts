@@ -215,10 +215,6 @@ export async function POST(request: NextRequest) {
 
     if (token) {
       if (token === "__admin__") {
-        const adminPassword = process.env.ADMIN_PASSWORD;
-        if (!adminPassword) {
-          return NextResponse.json({ error: "Admin not enabled" }, { status: 403 });
-        }
         isAdmin = true;
         userId = "__admin__";
         rawToken = token;
@@ -294,7 +290,7 @@ export async function POST(request: NextRequest) {
       const moduleId = nanoid();
       await db.prepare(
         `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(moduleId, collectionId, filename, meta?.id || null, meta?.title || filename.replace(".js", ""), meta?.description || "", meta?.version || null, meta?.author || null, meta?.requiredVersion || null, buffer.length, encrypted ? 1 : 0, remoteUrl);
       const ossKey = await store.save(collectionId, filename, buffer);
       if (ossKey) await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey, moduleId);
@@ -374,7 +370,16 @@ export async function POST(request: NextRequest) {
             await db.prepare(
               `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-            ).run(moduleId, collectionId, file.name, meta?.id || null, meta?.title || file.name.replace(".js", ""), meta?.description || "", meta?.version || null, meta?.author || null, meta?.requiredVersion || null, file.size, encrypted ? 1 : 0, wm?.source_url || null);
+            ).run(moduleId, collectionId, file.name,
+              wm?.id || meta?.id || null,
+              wm?.title || meta?.title || file.name.replace(".js", ""),
+              wm?.description || meta?.description || "",
+              wm?.version || meta?.version || null,
+              wm?.author || meta?.author || null,
+              wm?.requiredVersion || meta?.requiredVersion || null,
+              file.size,
+              encrypted ? 1 : 0,
+              wm?.source_url || null);
             const ossKey2 = await store.save(collectionId, file.name, buffer);
             if (ossKey2) await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey2, moduleId);
             allModules.push({ id: moduleId, filename: file.name, title: meta?.title || file.name, version: meta?.version, encrypted });
