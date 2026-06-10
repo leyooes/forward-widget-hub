@@ -45,8 +45,5 @@ export function createR2Store(binding: unknown): Store {
         cursor = listed.truncated ? listed.cursor : undefined;
       } while (cursor);
     },
-    getUrl(collectionId, filename) {
-      return `https://${process.env.R2_PUBLIC_URL || "YOUR_R2_PUBLIC_URL"}/${collectionId}/${filename}`;
-    },
   };
 }
