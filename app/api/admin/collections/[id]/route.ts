@@ -51,7 +51,7 @@ export async function POST(
 
     await db.prepare(
       `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       moduleId,
       collectionId,
@@ -97,8 +97,8 @@ export async function PUT(
   const db = await getBackendDb();
  
   const collection = (await db
-    .prepare("SELECT id, slug FROM collections WHERE id = ?")
-    .get(id)) as { id: string; slug: string } | undefined;
+    .prepare("SELECT id, slug, icon_url FROM collections WHERE id = ?")
+    .get(id)) as { id: string; slug: string; icon_url: string } | undefined;
  
   if (!collection) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
