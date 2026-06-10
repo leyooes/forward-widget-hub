@@ -6,9 +6,11 @@ function getClientIp(request: NextRequest): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
 }
 
+type Params = Promise<{ slug: string }>;
+
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Params }
 ) {
   const { slug } = await params;
   const db = await getBackendDb();
@@ -24,7 +26,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Params }
 ) {
   const ip = getClientIp(request);
   const rateCheck = checkRateLimit(ip);
@@ -89,7 +91,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
+  { params }: { params: Params }
 ) {
   const ip = getClientIp(request);
   const rateCheck = checkRateLimit(ip);
