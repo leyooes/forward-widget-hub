@@ -310,10 +310,15 @@ export default function AdminPage() {
       const formData = new FormData();
       files.forEach((file) => formData.append("files", file));
       const res = await fetch(`/api/admin/collections/${col.id}`, { method: "POST", body: formData });
-      if (res.ok) fetchCollections();
-      else {
-        const data = await res.json();
-        alert(data.error || "上传失败");
+      if (res.ok) {
+        fetchCollections();
+      } else {
+        try {
+          const data = await res.json();
+          alert(data.error || `上传失败 (HTTP ${res.status})`);
+        } catch {
+          alert(`上传失败 (HTTP ${res.status})`);
+        }
       }
     } catch (e) {
       alert(`上传失败：${(e as Error).message}`);
@@ -336,8 +341,12 @@ export default function AdminPage() {
         setModuleUrlInput((prev) => ({ ...prev, [col.id]: "" }));
         fetchCollections();
       } else {
-        const data = await uploadRes.json();
-        alert(data.error || "添加失败");
+        try {
+          const data = await uploadRes.json();
+          alert(data.error || `添加失败 (HTTP ${uploadRes.status})`);
+        } catch {
+          alert(`添加失败 (HTTP ${uploadRes.status})`);
+        }
       }
     } catch (e) {
       alert(`添加失败：${(e as Error).message}`);
