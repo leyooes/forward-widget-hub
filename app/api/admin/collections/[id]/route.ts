@@ -68,7 +68,6 @@ export async function POST(
   const db = await getBackendDb();
   const store = await getBackendStore();
 
-  // Verify collection exists
   const collection = await db.prepare("SELECT id, slug FROM collections WHERE id = ?").get(collectionId) as { id: string; slug: string } | undefined;
   if (!collection) {
     return NextResponse.json({ error: "Collection not found" }, { status: 404 });
@@ -102,16 +101,13 @@ export async function POST(
       return NextResponse.json({ error: `Invalid .fwd: ${(e as Error).message}` }, { status: 400 });
     }
 
-    // Update collection metadata
     await db.prepare(
       "UPDATE collections SET title = COALESCE(?, title), description = COALESCE(?, description), source_url = ?, updated_at = unixepoch() WHERE id = ?"
     ).run(fwd.title || null, fwd.description || null, remoteUrl, collectionId);
 
-    // Clear existing modules
     await db.prepare("DELETE FROM modules WHERE collection_id = ?").run(collectionId);
     await store.removeCollection(collectionId);
 
-    // Download and store each widget
     const modules: Array<{ id: string; filename: string; title: string; version?: string; encrypted: boolean }> = [];
     for (const widget of fwd.widgets) {
       const dl = await downloadRemoteJs(widget.url);
@@ -143,7 +139,7 @@ export async function POST(
     return NextResponse.json({ success: true, modules });
   }
 
-  // Handle remote URL (single .js): download server-side to avoid CORS issues
+  // Handle remote URL (single .js): download server-side
   if (remoteUrl && files.length === 0) {
     let downloaded: { buffer: Buffer; filename: string };
     try {
@@ -162,21 +158,14 @@ export async function POST(
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       moduleId, collectionId, filename,
-      meta?.id || null,
-      meta?.title || filename.replace(".js", ""),
-      meta?.description || "",
-      meta?.version || null,
-      meta?.author || null,
-      meta?.requiredVersion || null,
-      buffer.length, encrypted ? 1 : 0,
-      remoteUrl
+      meta?.id || null, meta?.title || filename.replace(".js", ""),
+      meta?.description || "", meta?.version || null,
+      meta?.author || null, meta?.requiredVersion || null,
+      buffer.length, encrypted ? 1 : 0, remoteUrl
     );
 
     const ossKey = await store.save(collectionId, filename, buffer);
-    if (ossKey) {
-      await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey, moduleId);
-    }
-
+    if (ossKey) await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey, moduleId);
     await db.prepare("UPDATE collections SET updated_at = unixepoch() WHERE id = ?").run(collectionId);
 
     return NextResponse.json({
@@ -185,15 +174,11 @@ export async function POST(
     });
   }
 
+  // Local file upload
   const modules: Array<{ id: string; filename: string; title: string; version?: string }> = [];
-
   for (const file of files) {
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: `File ${file.name} exceeds 5MB limit` }, { status: 413 });
-    }
-    if (!file.name.endsWith(".js")) {
-      return NextResponse.json({ error: `File ${file.name} must be .js` }, { status: 400 });
-    }
+    if (file.size > MAX_FILE_SIZE) return NextResponse.json({ error: `File ${file.name} exceeds 5MB limit` }, { status: 413 });
+    if (!file.name.endsWith(".js")) return NextResponse.json({ error: `File ${file.name} must be .js` }, { status: 400 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const encrypted = isEncrypted(buffer);
@@ -204,110 +189,89 @@ export async function POST(
     await db.prepare(
       `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      moduleId,
-      collectionId,
-      filename,
-      meta?.id || null,
-      meta?.title || filename.replace(".js", ""),
-      meta?.description || "",
-      meta?.version || null,
-      meta?.author || null,
-      meta?.requiredVersion || null,
-      file.size,
-      encrypted ? 1 : 0,
-      sourceUrl || null
-    );
+    ).run(moduleId, collectionId, filename, meta?.id || null, meta?.title || filename.replace(".js", ""),
+      meta?.description || "", meta?.version || null, meta?.author || null, meta?.requiredVersion || null,
+      file.size, encrypted ? 1 : 0, sourceUrl || null);
 
     const ossKey = await store.save(collectionId, filename, buffer);
-    if (ossKey) {
-      await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey, moduleId);
-    }
-
-    modules.push({
-      id: moduleId,
-      filename,
-      title: meta?.title || filename,
-      version: meta?.version,
-    });
+    if (ossKey) await db.prepare("UPDATE modules SET oss_key = ? WHERE id = ?").run(ossKey, moduleId);
+    modules.push({ id: moduleId, filename, title: meta?.title || filename, version: meta?.version });
   }
 
-  // Update collection timestamp
   await db.prepare("UPDATE collections SET updated_at = unixepoch() WHERE id = ?").run(collectionId);
-
   return NextResponse.json({ success: true, modules });
 }
- 
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Params }
 ) {
   const denied = await verifyAdmin(request);
   if (denied) return denied;
- 
+
   const { id } = await params;
   const db = await getBackendDb();
- 
+
   const collection = (await db
     .prepare("SELECT id, slug FROM collections WHERE id = ?")
     .get(id)) as { id: string; slug: string } | undefined;
- 
+
   if (!collection) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
- 
+
   const formData = await request.formData();
   const title = formData.get("title") as string | null;
   const description = formData.get("description") as string | null;
   const icon = formData.get("icon") as File | null;
- 
+
   if (!title || !title.trim()) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
- 
+
   let iconUrl: string | null = null;
   if (icon) {
     const store = await getBackendStore();
-    // Delete all old icon files (could be a different extension)
-    for (const oldExt of ["jpg", "jpeg", "png", "gif", "webp", "svg"]) {
+    // Delete all old icon files (could be a different extension or case)
+    for (const oldExt of ["jpg", "jpeg", "png", "gif", "webp", "svg", "JPG", "JPEG", "PNG", "GIF", "WEBP", "SVG"]) {
       await store.remove(id, `_icon.${oldExt}`).catch(() => {});
     }
     const iconBuffer = Buffer.from(await icon.arrayBuffer());
-    const ext = icon.name.split(".").pop() || "png";
+    const ext = (icon.name.split(".").pop() || "png").toLowerCase();
     const iconKey = `_icon.${ext}`;
     await store.save(id, iconKey, iconBuffer);
     iconUrl = `/api/collections/${collection.slug}/icon?t=${Date.now()}`;
   }
- 
+
   await db.prepare(
     "UPDATE collections SET title = ?, description = ?, icon_url = COALESCE(?, icon_url), updated_at = unixepoch() WHERE id = ?"
   ).run(title.trim(), description || "", iconUrl, id);
- 
+
   return NextResponse.json({ success: true });
 }
- 
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Params }
 ) {
   const denied = await verifyAdmin(request);
   if (denied) return denied;
- 
+
   const { id } = await params;
   const db = await getBackendDb();
- 
+
   const collection = (await db
     .prepare("SELECT id FROM collections WHERE id = ?")
     .get(id)) as { id: string } | undefined;
- 
+
   if (!collection) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
- 
+
   await db.prepare("DELETE FROM modules WHERE collection_id = ?").run(id);
   await db.prepare("DELETE FROM collections WHERE id = ?").run(id);
   const store = await getBackendStore();
   await store.removeCollection(id);
- 
+
   return NextResponse.json({ success: true });
 }
