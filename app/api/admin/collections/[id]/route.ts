@@ -240,7 +240,9 @@ export async function PUT(
     const ext = (icon.name.split(".").pop() || "png").toLowerCase();
     const iconKey = `_icon.${ext}`;
     await store.save(id, iconKey, iconBuffer);
-    iconUrl = `/api/collections/${collection.slug}/icon?t=${Date.now()}`;
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+    const host = request.headers.get("host") || request.nextUrl.host;
+    iconUrl = `${proto}://${host}/api/collections/${collection.slug}/icon?t=${Date.now()}`;
   }
 
   await db.prepare(
