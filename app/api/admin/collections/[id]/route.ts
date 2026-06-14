@@ -27,27 +27,62 @@ export async function POST(
 
   const formData = await request.formData();
   const files = formData.getAll("files") as File[];
+  const remoteUrl = formData.get("url") as string | null;
   const sourceUrl = formData.get("source_url") as string | null;
 
-  if (!files.length) {
-    return NextResponse.json({ error: "No files provided" }, { status: 400 });
+  let filesToProcess: Array<{ buffer: Buffer; filename: string; sourceUrl: string | null }> = [];
+
+  // 处理通过 URL 下载的文件
+  if (remoteUrl) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+      const res = await fetch(remoteUrl, { signal: controller.signal, headers: { "User-Agent": "ForwardWidgetHub" } });
+      clearTimeout(timeout);
+      
+      if (!res.ok) {
+        return NextResponse.json({ error: `Failed to download: HTTP ${res.status}` }, { status: 400 });
+      }
+      
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.length > 5 * 1024 * 1024) {
+        return NextResponse.json({ error: "File exceeds 5MB limit" }, { status: 413 });
+      }
+      
+      const urlPath = new URL(remoteUrl).pathname;
+      let filename = urlPath.split("/").pop() || "widget.js";
+      if (!filename.endsWith(".js")) filename += ".js";
+      
+      filesToProcess.push({ buffer, filename, sourceUrl: remoteUrl });
+    } catch (e) {
+      return NextResponse.json({ error: `Failed to download: ${(e as Error).message}` }, { status: 400 });
+    }
+  }
+
+  // 处理直接上传的文件
+  if (files.length > 0) {
+    for (const file of files) {
+      if (file.size > 5 * 1024 * 1024) {
+        return NextResponse.json({ error: `File ${file.name} exceeds 5MB limit` }, { status: 413 });
+      }
+      if (!file.name.endsWith(".js")) {
+        return NextResponse.json({ error: `File ${file.name} must be .js` }, { status: 400 });
+      }
+      const buffer = Buffer.from(await file.arrayBuffer());
+      filesToProcess.push({ buffer, filename: file.name, sourceUrl: sourceUrl || null });
+    }
+  }
+
+  if (filesToProcess.length === 0 && !remoteUrl) {
+    return NextResponse.json({ error: "No files or URL provided" }, { status: 400 });
   }
 
   const modules: Array<{ id: string; filename: string; title: string; version?: string }> = [];
 
-  for (const file of files) {
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json({ error: `File ${file.name} exceeds 5MB limit` }, { status: 413 });
-    }
-    if (!file.name.endsWith(".js")) {
-      return NextResponse.json({ error: `File ${file.name} must be .js` }, { status: 400 });
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const encrypted = isEncrypted(buffer);
+  for (const { buffer, filename, sourceUrl: fileSourceUrl } of filesToProcess) {
+    const encrypted = buffer.toString("utf8").startsWith("enc:");
     const meta = encrypted ? null : parseWidgetMetadata(buffer.toString("utf8"));
     const moduleId = nanoid();
-    const filename = file.name;
 
     await db.prepare(
       `INSERT INTO modules (id, collection_id, filename, widget_id, title, description, version, author, required_version, file_size, is_encrypted, source_url)
@@ -60,11 +95,10 @@ export async function POST(
       meta?.title || filename.replace(".js", ""),
       meta?.description || "",
       meta?.version || null,
-      meta?.author || null,
-      meta?.requiredVersion || null,
-      file.size,
+      meta?.author || meta?.requiredVersion || null,
+      buffer.length,
       encrypted ? 1 : 0,
-      sourceUrl || null
+      fileSourceUrl || null
     );
 
     const ossKey = await store.save(collectionId, filename, buffer);
