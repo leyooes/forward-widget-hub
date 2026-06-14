@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBackendDb, getBackendStore } from "@/lib/backend";
 
-const ICON_EXTS = ["jpg", "jpeg", "png", "gif", "webp", "svg"];
+const ICON_EXTS = ["jpg", "png", "gif", "webp", "svg"];
 const MIME: Record<string, string> = {
-  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif",
+  jpg: "image/jpeg", png: "image/png", gif: "image/gif",
   webp: "image/webp", svg: "image/svg+xml",
 };
 
