@@ -159,16 +159,14 @@ export default function AdminPage() {
     if (!confirm(`确定从源地址同步「${mod.title || mod.filename}」？`)) return;
     setSyncingModuleId(mod.id);
     try {
-      const res = await fetch(mod.source_url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const fname = mod.source_url.split("/").pop() || mod.filename;
-      const file = new File([blob], fname, { type: "application/javascript" });
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("url", mod.source_url);
       const putRes = await fetch(`/api/admin/modules/${mod.id}`, { method: "PUT", body: formData });
       if (putRes.ok) fetchCollections();
-      else alert("同步失败");
+      else {
+        const data = await putRes.json();
+        alert(data.error || "同步失败");
+      }
     } catch (e) {
       alert(`同步失败：${(e as Error).message}`);
     } finally {
@@ -181,35 +179,15 @@ export default function AdminPage() {
     if (!confirm(`确定从源地址重新同步合集「${col.title}」？`)) return;
     setSyncingColId(col.id);
     try {
-      const res = await fetch(col.source_url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      const fwd = JSON.parse(text);
-      if (!fwd.widgets || !Array.isArray(fwd.widgets)) throw new Error("Invalid .fwd");
-      const downloadedFiles: File[] = [];
-      const widgetMetas: object[] = [];
-      for (const widget of fwd.widgets) {
-        let fname = widget.url.split("/").pop() || "widget.js";
-        if (!fname.endsWith(".js")) fname += ".js";
-        const dlRes = await fetch(widget.url);
-        if (!dlRes.ok) throw new Error(`Failed to download ${fname}`);
-        const blob = await dlRes.blob();
-        downloadedFiles.push(new File([blob], fname, { type: "application/javascript" }));
-        widgetMetas.push({ id: widget.id, title: widget.title, description: widget.description, version: widget.version, author: widget.author, requiredVersion: widget.requiredVersion, source_url: widget.url });
-      }
       const formData = new FormData();
-      downloadedFiles.forEach((f) => formData.append("files", f));
-      formData.append("token", "__admin__");
-      formData.append("collection_id", col.id);
+      formData.append("url", col.source_url);
       formData.append("sync", "true");
-      formData.append("source_url", col.source_url);
-      formData.append("widget_meta", JSON.stringify(widgetMetas));
-      if (fwd.title) formData.append("title", fwd.title);
-      if (fwd.description) formData.append("description", fwd.description);
-      if (fwd.icon) formData.append("icon", fwd.icon);
-      const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
-      if (uploadRes.ok) fetchCollections();
-      else { const d = await uploadRes.json(); alert(d.error || "同步失败"); }
+      const res = await fetch(`/api/admin/collections/${col.id}`, { method: "POST", body: formData });
+      if (res.ok) fetchCollections();
+      else {
+        const data = await res.json();
+        alert(data.error || "同步失败");
+      }
     } catch (e) {
       alert(`同步失败：${(e as Error).message}`);
     } finally {
@@ -329,13 +307,8 @@ export default function AdminPage() {
     try { new URL(url); } catch { alert("请输入有效的 URL"); return; }
     setAddingByUrl((prev) => ({ ...prev, [col.id]: true }));
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const fname = url.split("/").pop() || "widget.js";
-      const file = new File([blob], fname, { type: "application/javascript" });
       const formData = new FormData();
-      formData.append("files", file);
+      formData.append("url", url);
       formData.append("source_url", url);
       const uploadRes = await fetch(`/api/admin/collections/${col.id}`, { method: "POST", body: formData });
       if (uploadRes.ok) {
