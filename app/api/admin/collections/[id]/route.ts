@@ -232,17 +232,23 @@ export async function PUT(
   let iconUrl: string | null = null;
   if (icon) {
     const store = await getBackendStore();
-    // Delete all old icon files (could be a different extension or case)
-    for (const oldExt of ["jpg", "jpeg", "png", "gif", "webp", "svg", "JPG", "JPEG", "PNG", "GIF", "WEBP", "SVG"]) {
+    // Delete all old icon files (could be a different extension)
+    for (const oldExt of ["jpg", "png", "gif", "webp", "svg"]) {
       await store.remove(id, `_icon.${oldExt}`).catch(() => {});
     }
+    // Use MIME type to determine extension (consistent with source project)
+    const contentType = icon.type || "image/png";
+    const ext = contentType.includes("png") ? "png"
+      : contentType.includes("gif") ? "gif"
+      : contentType.includes("webp") ? "webp"
+      : contentType.includes("svg") ? "svg"
+      : "jpg";
     const iconBuffer = Buffer.from(await icon.arrayBuffer());
-    const ext = (icon.name.split(".").pop() || "png").toLowerCase();
-    const iconKey = `_icon.${ext}`;
-    await store.save(id, iconKey, iconBuffer);
+    await store.save(id, `_icon.${ext}`, iconBuffer);
+    const cdnUrl = store.getUrl?.(id, `_icon.${ext}`);
     const proto = request.headers.get("x-forwarded-proto") || "https";
     const host = request.headers.get("host") || request.nextUrl.host;
-    iconUrl = `${proto}://${host}/api/collections/${collection.slug}/icon?t=${Date.now()}`;
+    iconUrl = cdnUrl || `${proto}://${host}/api/collections/${collection.slug}/icon`;
   }
 
   await db.prepare(
